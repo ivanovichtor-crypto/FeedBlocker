@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">FeedBlocker</string>
+    <string name="accessibility_service_description">Блокирует ленту рекомендаций в TikTok и YouTube Shorts, помогая избежать бесконечного скроллинга.</string>
+</resources>
