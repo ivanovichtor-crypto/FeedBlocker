@@ -4,6 +4,13 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.Service
+import android.content.Context
+import android.os.Build
+import android.os.IBinder
+import androidx.core.app.NotificationCompat
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -81,6 +88,11 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(Intent(this, KeepAliveService::class.java))
+        } else {
+            startService(Intent(this, KeepAliveService::class.java))
+        }
     }
 
     override fun onResume() {
@@ -96,6 +108,35 @@ class MainActivity : ComponentActivity() {
             Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
         )
         return service?.contains("com.example.feedblocker/.FeedBlockerAccessibilityService") == true
+    }
+}
+
+class KeepAliveService : Service() {
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        createNotificationChannel()
+        val notification = NotificationCompat.Builder(this, "feed_blocker_channel")
+            .setContentTitle("Блокировщик лент работает")
+            .setContentText("Сервис активен и защищает вас от лент")
+            .setSmallIcon(android.R.drawable.ic_lock_lock) // Замените на свою иконку
+            .setOngoing(true) // Уведомление нельзя смахинуть
+            .build()
+
+        startForeground(1, notification)
+        return START_STICKY // Если систему убьет сервис, Android перезапустит его
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                "feed_blocker_channel",
+                "Blocking Service",
+                NotificationManager.IMPORTANCE_LOW
+            )
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.createNotificationChannel(channel)
+        }
     }
 }
 
