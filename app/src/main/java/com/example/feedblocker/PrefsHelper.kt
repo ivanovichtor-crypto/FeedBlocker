@@ -24,10 +24,17 @@ object PrefsHelper {
     /**
      * Проверить, активна ли пауза прямо сейчас.
      */
-    fun isPaused(context: Context): Boolean {
+    fun getPauseUntil(context: Context): Long {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val pauseUntil = prefs.getLong(KEY_PAUSE_UNTIL, 0L)
-        return System.currentTimeMillis() < pauseUntil
+        return prefs.getLong(KEY_PAUSE_UNTIL, 0L)
+    }
+
+    fun remainingPauseMillis(context: Context): Long {
+        return (getPauseUntil(context) - System.currentTimeMillis()).coerceAtLeast(0L)
+    }
+
+    fun isPaused(context: Context): Boolean {
+        return System.currentTimeMillis() < getPauseUntil(context)
     }
 
     /**

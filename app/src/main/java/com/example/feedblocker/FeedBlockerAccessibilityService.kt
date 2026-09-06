@@ -3,6 +3,7 @@ package com.example.feedblocker
 import android.accessibilityservice.AccessibilityService
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
@@ -13,161 +14,156 @@ class FeedBlockerAccessibilityService : AccessibilityService() {
         private const val TAG = "FeedBlocker"
         private const val TIKTOK_PACKAGE = "com.zhiliaoapp.musically"
         private const val YOUTUBE_PACKAGE = "com.google.android.youtube"
-        private const val MIN_INTERVAL_MS = 1000L
+        private const val MIN_INTERVAL_MS = 800L
+        private const val PAUSE_CACHE_MS = 1000L
+        private const val SLOW_EVENT_MS = 16L
     }
 
     private var isBlocking = false
     private var lastBlockTime = 0L
+    private var pauseUntilCached = 0L
+    private var lastPauseCheckElapsed = 0L
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (event == null) return
+        if (event == null || isBlocking) return
 
-        if (PrefsHelper.isPaused(this)) {
+        val type = event.eventType
+        if (type != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
+            type != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED &&
+            type != AccessibilityEvent.TYPE_VIEW_SCROLLED
+        ) {
             return
         }
+
+        if (isPausedCached()) return
+
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastBlockTime < MIN_INTERVAL_MS) return
 
         val packageName = event.packageName?.toString() ?: return
+        if (packageName != TIKTOK_PACKAGE && packageName != YOUTUBE_PACKAGE) return
 
-        if (packageName != TIKTOK_PACKAGE && packageName != YOUTUBE_PACKAGE) {
-            return
-        }
-
+        val started = if (BuildConfig.DEBUG) SystemClock.elapsedRealtime() else 0L
         val root = rootInActiveWindow ?: return
-
-        val currentTime = System.currentTimeMillis()
-        if (currentTime - lastBlockTime < MIN_INTERVAL_MS) {
-            return
-        }
-
-        when (packageName) {
-            TIKTOK_PACKAGE -> handleTikTok(root)
-            YOUTUBE_PACKAGE -> handleYouTube(root)
+        try {
+            when (packageName) {
+                TIKTOK_PACKAGE -> handleTikTok(root)
+                YOUTUBE_PACKAGE -> handleYouTube(root)
+            }
+        } finally {
+            if (BuildConfig.DEBUG) {
+                val dt = SystemClock.elapsedRealtime() - started
+                if (dt > SLOW_EVENT_MS) {
+                    Log.w(TAG, "slow a11y ${dt}ms type=$type pkg=$packageName")
+                }
+            }
         }
     }
 
-    // ============================================================
-    // БЛОКИРОВКА TIKTOK — ТОЛЬКО ПО СЛОВУ "Рекомендации"
-    // ============================================================
+    private fun isPausedCached(): Boolean {
+        val elapsed = SystemClock.elapsedRealtime()
+        if (elapsed - lastPauseCheckElapsed >= PAUSE_CACHE_MS) {
+            lastPauseCheckElapsed = elapsed
+            pauseUntilCached = PrefsHelper.getPauseUntil(this)
+        }
+        return System.currentTimeMillis() < pauseUntilCached
+    }
 
     private fun handleTikTok(root: AccessibilityNodeInfo) {
         val recommendationsNodes = root.findAccessibilityNodeInfosByText("Рекомендации")
+        val found = recommendationsNodes.isNotEmpty()
+        recycleNodes(recommendationsNodes)
+        if (!found) return
 
-        if (recommendationsNodes.isNotEmpty() && !isBlocking) {
-            Log.d(TAG, "🔴 Найдено 'Рекомендации' — переходим в Друзья")
-            isBlocking = true
-            lastBlockTime = System.currentTimeMillis()
+        Log.d(TAG, "Найдено 'Рекомендации' — переходим в Друзья")
+        isBlocking = true
+        lastBlockTime = SystemClock.elapsedRealtime()
 
-            val success = switchToFriendsTab(root)
-
-            if (!success) {
-                Log.d(TAG, "⚠️ Не удалось переключиться на Друзья")
-                performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)
-            }
-
-            Handler(Looper.getMainLooper()).postDelayed({
-                isBlocking = false
-            }, MIN_INTERVAL_MS)
+        val success = switchToFriendsTab(root)
+        if (!success) {
+            Log.d(TAG, "Не удалось переключиться на Друзья")
+            performGlobalAction(GLOBAL_ACTION_BACK)
         }
+
+        Handler(Looper.getMainLooper()).postDelayed({
+            isBlocking = false
+        }, MIN_INTERVAL_MS)
     }
 
-    // ============================================================
-    // ПЕРЕКЛЮЧЕНИЕ НА ВКЛАДКУ "ДРУЗЬЯ" (по поиску)
-    // ============================================================
-
     private fun switchToFriendsTab(root: AccessibilityNodeInfo): Boolean {
-        // Способ 1: Ищем по тексту "Друзья" и кликаем по кликабельному родителю
         val friendsTextNodes = root.findAccessibilityNodeInfosByText("Друзья")
-        if (friendsTextNodes.isNotEmpty()) {
-            Log.d(TAG, "✅ Найдено 'Друзья' по тексту")
+        try {
             for (node in friendsTextNodes) {
-                // Пытаемся найти кликабельного родителя
-                var parent = node.parent
-                while (parent != null) {
-                    if (parent.isClickable) {
-                        Log.d(TAG, "✅ Кликаем по родителю 'Друзья'")
-                        parent.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                        return true
-                    }
-                    parent = parent.parent
-                }
-
-                // Если родитель не кликабельный — пробуем сам узел
-                if (node.isClickable) {
-                    Log.d(TAG, "✅ Кликаем по 'Друзья'")
-                    node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                    return true
-                }
+                if (clickNodeOrClickableParent(node)) return true
             }
+        } finally {
+            recycleNodes(friendsTextNodes)
         }
 
-        // Способ 2: Ищем по индексу 1 в нижней навигации
         val navNodes = root.findAccessibilityNodeInfosByViewId("com.zhiliaoapp.musically:id/bottom_navigation")
-        if (navNodes.isNotEmpty()) {
-            Log.d(TAG, "✅ Найдена нижняя навигация")
-            val navContainer = navNodes[0]
-
-            // Друзья на позиции 1 (0-Главная, 1-Друзья, 2-Создать, 3-Входящие, 4-Профиль)
-            val friendsIndex = 1
-            if (navContainer.childCount > friendsIndex) {
-                val friendsTab = navContainer.getChild(friendsIndex)
-                if (friendsTab != null) {
-                    Log.d(TAG, "✅ Найдена вкладка Друзья по индексу $friendsIndex")
-
-                    if (friendsTab.isClickable) {
-                        friendsTab.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                        Log.d(TAG, "✅ Кликнули по вкладке Друзья")
+        try {
+            if (navNodes.isNotEmpty()) {
+                val navContainer = navNodes[0]
+                val friendsIndex = 1
+                if (navContainer.childCount > friendsIndex) {
+                    val friendsTab = navContainer.getChild(friendsIndex)
+                    if (friendsTab != null && clickNodeOrClickableParent(friendsTab)) {
                         return true
-                    }
-
-                    var parent = friendsTab.parent
-                    while (parent != null) {
-                        if (parent.isClickable) {
-                            parent.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                            Log.d(TAG, "✅ Кликнули по родителю вкладки Друзья")
-                            return true
-                        }
-                        parent = parent.parent
                     }
                 }
             }
+        } finally {
+            recycleNodes(navNodes)
         }
 
-        // Способ 3: Ищем по ID tab_friends (если есть)
         val friendsIdNodes = root.findAccessibilityNodeInfosByViewId("com.zhiliaoapp.musically:id/tab_friends")
-        if (friendsIdNodes.isNotEmpty()) {
-            Log.d(TAG, "✅ Найден tab_friends")
+        try {
             for (node in friendsIdNodes) {
-                if (node.isClickable) {
-                    node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                    Log.d(TAG, "✅ Кликнули по tab_friends")
-                    return true
-                }
-                var parent = node.parent
-                while (parent != null) {
-                    if (parent.isClickable) {
-                        parent.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                        Log.d(TAG, "✅ Кликнули по родителю tab_friends")
-                        return true
-                    }
-                    parent = parent.parent
-                }
+                if (clickNodeOrClickableParent(node)) return true
             }
+        } finally {
+            recycleNodes(friendsIdNodes)
         }
 
         return false
     }
 
-    // ============================================================
-    // БЛОКИРОВКА YOUTUBE SHORTS
-    // ============================================================
+    private fun clickNodeOrClickableParent(node: AccessibilityNodeInfo): Boolean {
+        if (node.isClickable) {
+            node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            return true
+        }
+        var parent = node.parent
+        while (parent != null) {
+            if (parent.isClickable) {
+                parent.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                return true
+            }
+            parent = parent.parent
+        }
+        return false
+    }
 
     private fun handleYouTube(root: AccessibilityNodeInfo) {
-        val shortsNodes = root.findAccessibilityNodeInfosByViewId("com.google.android.youtube:id/reel_player_page_container")
+        val shortsNodes = root.findAccessibilityNodeInfosByViewId(
+            "com.google.android.youtube:id/reel_player_page_container"
+        )
+        val found = shortsNodes.isNotEmpty()
+        recycleNodes(shortsNodes)
+        if (!found) return
 
-        if (shortsNodes.isNotEmpty()) {
-            Log.d(TAG, "🔴 Обнаружены YouTube Shorts — возвращаем на главную")
-            performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)
-            lastBlockTime = System.currentTimeMillis()
+        Log.d(TAG, "Обнаружены YouTube Shorts — назад")
+        performGlobalAction(GLOBAL_ACTION_BACK)
+        lastBlockTime = SystemClock.elapsedRealtime()
+    }
+
+    @Suppress("DEPRECATION")
+    private fun recycleNodes(nodes: List<AccessibilityNodeInfo>) {
+        for (node in nodes) {
+            try {
+                node.recycle()
+            } catch (_: Exception) {
+            }
         }
     }
 
@@ -177,6 +173,7 @@ class FeedBlockerAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
-        Log.d(TAG, "✅ Сервис запущен и подключён")
+        lastPauseCheckElapsed = 0L
+        Log.d(TAG, "Сервис запущен и подключён")
     }
 }

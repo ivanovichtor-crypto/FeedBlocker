@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
-    android:accessibilityEventTypes="typeAllMask"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeViewScrolled"
     android:accessibilityFeedbackType="feedbackGeneric"
     android:accessibilityFlags="flagDefault|flagRetrieveInteractiveWindows|flagReportViewIds"
     android:canRetrieveWindowContent="true"
     android:description="@string/accessibility_service_description"
-    android:notificationTimeout="100"
+    android:notificationTimeout="250"
     android:packageNames="com.zhiliaoapp.musically,com.google.android.youtube">
 
     <!-- ⚠️ ВАЖНАЯ СТРОКА ДЛЯ ЗАЩИТЫ ОТ ОТКЛЮЧЕНИЯ (Android 12+) -->
