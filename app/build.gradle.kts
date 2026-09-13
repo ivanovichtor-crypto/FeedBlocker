@@ -15,8 +15,8 @@ android {
         applicationId = "com.example.feedblocker"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -62,7 +62,7 @@ androidComponents {
     onVariants(selector().all()) { variant ->
         variant.outputs.forEach { output ->
             // Просто подставляем фиксированное название версии
-            output.outputFileName.set("FeedBlocker_v1.1.apk")
+            output.outputFileName.set("FeedBlocker_v1.2.apk")
         }
     }
 }
