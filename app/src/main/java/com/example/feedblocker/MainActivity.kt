@@ -30,6 +30,7 @@ import kotlinx.coroutines.delay
 class MainActivity : ComponentActivity() {
 
     private var serviceEnabled by mutableStateOf(false)
+    private var blockingEnabled by mutableStateOf(true)
     private var pauseRemainingMs by mutableLongStateOf(0L)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -50,6 +51,7 @@ class MainActivity : ComponentActivity() {
                     MainScreen(
                         modifier = Modifier.padding(innerPadding),
                         isServiceEnabled = serviceEnabled,
+                        isBlockingEnabled = blockingEnabled,
                         pauseRemainingMs = pauseRemainingMs,
                         onEnableServiceClick = {
                             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
@@ -68,9 +70,16 @@ class MainActivity : ComponentActivity() {
                                     startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                                     return@MainScreen
                                 }
+                                PrefsHelper.setBlockingEnabled(this, true)
                                 PrefsHelper.clearPause(this)
+                                blockingEnabled = true
+                                pauseRemainingMs = 0L
                                 NotificationHelper.showActiveNotification(this)
                             } else {
+                                PrefsHelper.setBlockingEnabled(this, false)
+                                PrefsHelper.clearPause(this)
+                                blockingEnabled = false
+                                pauseRemainingMs = 0L
                                 NotificationHelper.dismissNotification(this)
                             }
                         },
@@ -80,7 +89,9 @@ class MainActivity : ComponentActivity() {
                             NotificationHelper.showPausedNotification(this)
                         },
                         onResumeClick = {
+                            PrefsHelper.setBlockingEnabled(this, true)
                             PrefsHelper.clearPause(this)
+                            blockingEnabled = true
                             pauseRemainingMs = 0L
                             if (isAccessibilityServiceEnabled()) {
                                 NotificationHelper.showActiveNotification(this)
@@ -95,13 +106,16 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         refreshStatus()
-        if (serviceEnabled && !PrefsHelper.isPaused(this)) {
+        if (serviceEnabled && blockingEnabled && !PrefsHelper.isPaused(this)) {
             NotificationHelper.showActiveNotification(this)
+        } else if (!blockingEnabled) {
+            NotificationHelper.dismissNotification(this)
         }
     }
 
     private fun refreshStatus() {
         serviceEnabled = isAccessibilityServiceEnabled()
+        blockingEnabled = PrefsHelper.isBlockingEnabled(this)
         pauseRemainingMs = PrefsHelper.remainingPauseMillis(this)
     }
 

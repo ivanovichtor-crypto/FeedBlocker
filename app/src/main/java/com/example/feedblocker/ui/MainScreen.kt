@@ -1,6 +1,60 @@
 package com.example.feedblocker.ui
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import com.example.feedblocker.ui.theme.FeedBlockerTheme
+import com.example.feedblocker.ui.theme.Mint
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -45,6 +99,7 @@ import com.example.feedblocker.ui.theme.Mint
 fun MainScreen(
     modifier: Modifier = Modifier,
     isServiceEnabled: Boolean,
+    isBlockingEnabled: Boolean,
     pauseRemainingMs: Long,
     onEnableServiceClick: () -> Unit,
     onOpenBatterySettingsClick: () -> Unit,
@@ -53,7 +108,7 @@ fun MainScreen(
     onResumeClick: () -> Unit
 ) {
     val isPaused = pauseRemainingMs > 0L
-    val protectionOn = isServiceEnabled && !isPaused
+    val protectionOn = isServiceEnabled && isBlockingEnabled && !isPaused
     val colors = MaterialTheme.colorScheme
     var showSetupHelp by remember { mutableStateOf(false) }
 
@@ -90,6 +145,7 @@ fun MainScreen(
 
         StatusCard(
             isServiceEnabled = isServiceEnabled,
+            isBlockingEnabled = isBlockingEnabled,
             isPaused = isPaused,
             pauseRemainingMs = pauseRemainingMs
         )
@@ -121,8 +177,8 @@ fun MainScreen(
                         color = colors.onSurfaceVariant
                     )
                 }
-                Switch(
-                    checked = isServiceEnabled && !isPaused,
+                ProtectionSwitch(
+                    checked = protectionOn,
                     onCheckedChange = { checked ->
                         if (checked && !isServiceEnabled) {
                             onEnableServiceClick()
@@ -131,18 +187,12 @@ fun MainScreen(
                         } else {
                             onToggleService(checked)
                         }
-                    },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = colors.onPrimary,
-                        checkedTrackColor = Mint,
-                        uncheckedThumbColor = colors.onSurface,
-                        uncheckedTrackColor = colors.outline
-                    )
+                    }
                 )
             }
         }
 
-        if (isServiceEnabled) {
+        if (isServiceEnabled && isBlockingEnabled) {
             Spacer(modifier = Modifier.height(12.dp))
             if (isPaused) {
                 Button(
@@ -168,6 +218,65 @@ fun MainScreen(
             onDismiss = { showSetupHelp = false },
             onOpenAccessibility = onEnableServiceClick,
             onOpenAppSettings = onOpenBatterySettingsClick
+        )
+    }
+}
+
+@Composable
+private fun ProtectionSwitch(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    val colors = MaterialTheme.colorScheme
+    val thumbOffset by animateDpAsState(
+        targetValue = if (checked) 28.dp else 4.dp,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "thumbOffset"
+    )
+    val trackColor by animateColorAsState(
+        targetValue = if (checked) Mint else colors.outline,
+        animationSpec = tween(durationMillis = 220),
+        label = "trackColor"
+    )
+    val thumbColor by animateColorAsState(
+        targetValue = if (checked) Color.White else colors.onSurface,
+        animationSpec = tween(durationMillis = 220),
+        label = "thumbColor"
+    )
+    val scale = remember { Animatable(1f) }
+    LaunchedEffect(checked) {
+        scale.snapTo(0.86f)
+        scale.animateTo(
+            1f,
+            spring(
+                dampingRatio = Spring.DampingRatioMediumBouncy,
+                stiffness = Spring.StiffnessMedium
+            )
+        )
+    }
+
+    Box(
+        modifier = Modifier
+            .width(56.dp)
+            .height(32.dp)
+            .scale(scale.value)
+            .clip(RoundedCornerShape(16.dp))
+            .background(trackColor)
+            .semantics {
+                role = Role.Switch
+                toggleableState = if (checked) ToggleableState.On else ToggleableState.Off
+            }
+            .clickable { onCheckedChange(!checked) }
+    ) {
+        Box(
+            modifier = Modifier
+                .offset(x = thumbOffset, y = 4.dp)
+                .size(24.dp)
+                .clip(CircleShape)
+                .background(thumbColor)
         )
     }
 }
@@ -308,17 +417,18 @@ private fun HelpStep(number: String, title: String, body: String) {
 @Composable
 private fun StatusCard(
     isServiceEnabled: Boolean,
+    isBlockingEnabled: Boolean,
     isPaused: Boolean,
     pauseRemainingMs: Long
 ) {
     val colors = MaterialTheme.colorScheme
     val (title, subtitle, dotColor) = when {
-        isPaused -> Triple(
+        isPaused && isBlockingEnabled -> Triple(
             "На паузе",
             "Снова включится через ${formatRemaining(pauseRemainingMs)}",
             colors.error
         )
-        isServiceEnabled -> Triple(
+        isServiceEnabled && isBlockingEnabled -> Triple(
             "Активна",
             "Рекомендации TikTok и YouTube Shorts закрываются",
             Mint
@@ -366,6 +476,7 @@ private fun MainScreenPreview() {
     FeedBlockerTheme {
         MainScreen(
             isServiceEnabled = true,
+            isBlockingEnabled = true,
             pauseRemainingMs = 0,
             onEnableServiceClick = {},
             onOpenBatterySettingsClick = {},

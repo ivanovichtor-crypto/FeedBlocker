@@ -35,7 +35,7 @@ class FeedBlockerAccessibilityService : AccessibilityService() {
             return
         }
 
-        if (isPausedCached()) return
+        if (!PrefsHelper.isBlockingEnabled(this) || isPausedCached()) return
 
         val now = SystemClock.elapsedRealtime()
         if (now - lastBlockTime < MIN_INTERVAL_MS) return

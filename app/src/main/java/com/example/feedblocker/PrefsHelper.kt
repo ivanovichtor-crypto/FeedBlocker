@@ -11,6 +11,7 @@ object PrefsHelper {
 
     private const val PREFS_NAME = "feed_blocker_prefs"
     private const val KEY_PAUSE_UNTIL = "pause_until"
+    private const val KEY_BLOCKING_ENABLED = "blocking_enabled"
 
     /**
      * Включить паузу на заданное количество миллисекунд от текущего момента.
@@ -43,5 +44,15 @@ object PrefsHelper {
     fun clearPause(context: Context) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.edit().remove(KEY_PAUSE_UNTIL).apply()
+    }
+
+    fun isBlockingEnabled(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getBoolean(KEY_BLOCKING_ENABLED, true)
+    }
+
+    fun setBlockingEnabled(context: Context, enabled: Boolean) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putBoolean(KEY_BLOCKING_ENABLED, enabled).commit()
     }
 }
