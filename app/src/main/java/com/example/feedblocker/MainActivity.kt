@@ -65,16 +65,19 @@ class MainActivity : ComponentActivity() {
                             )
                         },
                         onToggleService = { enabled ->
+                            // Никакого автоматического перехода в системные настройки.
+                            // Тумблер только сохраняет желаемое состояние блокировки.
+                            // Если сервис доступности ещё не включён, статус-строка
+                            // и кнопка "i" на главном экране подскажут это пользователю,
+                            // а перейти в настройки можно только через отдельные кнопки.
                             if (enabled) {
-                                if (!isAccessibilityServiceEnabled()) {
-                                    startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                                    return@MainScreen
-                                }
                                 PrefsHelper.setBlockingEnabled(this, true)
                                 PrefsHelper.clearPause(this)
                                 blockingEnabled = true
                                 pauseRemainingMs = 0L
-                                NotificationHelper.showActiveNotification(this)
+                                if (isAccessibilityServiceEnabled()) {
+                                    NotificationHelper.showActiveNotification(this)
+                                }
                             } else {
                                 PrefsHelper.setBlockingEnabled(this, false)
                                 PrefsHelper.clearPause(this)
@@ -132,15 +135,13 @@ class KeepAliveService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
-                "feed_blocker_channel",
-                "Blocking Service",
-                NotificationManager.IMPORTANCE_LOW
-            )
-            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            manager.createNotificationChannel(channel)
-        }
+            "feed_blocker_channel",
+            "Blocking Service",
+            NotificationManager.IMPORTANCE_LOW
+        )
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.createNotificationChannel(channel)
         val notification = NotificationCompat.Builder(this, "feed_blocker_channel")
             .setContentTitle("Блокировщик лент работает")
             .setContentText("Сервис активен и защищает вас от лент")

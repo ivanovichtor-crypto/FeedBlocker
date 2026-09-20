@@ -29,8 +29,8 @@ The entire source code is open and available in this repository — feel free to
 1. Go to the [Releases](../../releases) section
 2. Download the latest `.apk` file
 3. Install it manually (you may need to allow "Install from unknown sources" for your file manager/browser)
-4. Open the app → enable the AccessibilityService in system settings (the app will guide you)
-5. For stable operation on some devices (especially Xiaomi/MIUI/HyperOS), you may need to disable battery restrictions for the app — there's a shortcut for this right inside the app
+4. Open the app and tap **Как настроить** (the **i** button) for a step-by-step guide
+5. Enable the AccessibilityService and remove battery restrictions as described there (especially on Xiaomi/MIUI/HyperOS)
 
 ## Tech stack
 

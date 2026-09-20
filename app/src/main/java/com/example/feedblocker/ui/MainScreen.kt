@@ -55,45 +55,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.feedblocker.ui.theme.FeedBlockerTheme
 import com.example.feedblocker.ui.theme.Mint
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import com.example.feedblocker.ui.theme.FeedBlockerTheme
-import com.example.feedblocker.ui.theme.Mint
 
 @Composable
 fun MainScreen(
@@ -180,9 +141,11 @@ fun MainScreen(
                 ProtectionSwitch(
                     checked = protectionOn,
                     onCheckedChange = { checked ->
-                        if (checked && !isServiceEnabled) {
-                            onEnableServiceClick()
-                        } else if (checked && isPaused) {
+                        // Тумблер больше никуда не "телепортирует" пользователя.
+                        // Он только меняет локальное состояние блокировки.
+                        // Переход в системные настройки доступности вынесен
+                        // в отдельные кнопки внутри диалога помощи (кнопка "i").
+                        if (checked && isPaused) {
                             onResumeClick()
                         } else {
                             onToggleService(checked)
@@ -192,7 +155,17 @@ fun MainScreen(
             }
         }
 
-        if (isServiceEnabled && isBlockingEnabled) {
+        if (!isServiceEnabled) {
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = "Сервис доступности ещё не включён — блокировка не сработает, пока вы не разрешите его в настройках. Нажмите «i» вверху экрана.",
+                fontSize = 12.sp,
+                color = colors.error,
+                lineHeight = 16.sp
+            )
+        }
+
+        if (isBlockingEnabled) {
             Spacer(modifier = Modifier.height(12.dp))
             if (isPaused) {
                 Button(
@@ -207,7 +180,7 @@ fun MainScreen(
                     onClick = onPauseClick,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Пауза на 5 минут")
+                    Text("Выключить блокировку на 5 минут")
                 }
             }
         }
@@ -333,14 +306,14 @@ private fun SetupHelpDialog(
                     .verticalScroll(rememberScrollState())
             ) {
                 Text(
-                    text = "Как настроить",
+                    text = "Настройка FeedBlocker",
                     fontWeight = FontWeight.Bold,
                     fontSize = 20.sp,
                     color = colors.onSurface
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Без системных разрешений Android остановит блокировку лент. Сделайте это один раз.",
+                    text = "Тумблер на главном экране только включает и выключает защиту внутри приложения. Разрешения нужно выдать вручную, один раз — используйте кнопки внизу.",
                     fontSize = 13.sp,
                     color = colors.onSurfaceVariant,
                     lineHeight = 18.sp
@@ -348,8 +321,8 @@ private fun SetupHelpDialog(
                 Spacer(modifier = Modifier.height(16.dp))
                 HelpStep(
                     number = "1",
-                    title = "Сервис доступности",
-                    body = "Настройки → Специальные возможности → Скачанные приложения → FeedBlocker. Включите верхний тумблер. Без этого приложение не видит ленту TikTok и YouTube Shorts."
+                    title = "Специальные возможности",
+                    body = "Настройки → Специальные возможности → Скачанные приложения → FeedBlocker. Включите верхний тумблер. Без этого приложение не видит ленту TikTok и YouTube Shorts. Открыть этот экран можно кнопкой «Специальные возможности» ниже."
                 )
                 HelpStep(
                     number = "2",
@@ -358,13 +331,13 @@ private fun SetupHelpDialog(
                 )
                 HelpStep(
                     number = "3",
-                    title = "Батарея",
-                    body = "Откройте сведения о приложении → Батарея (или расход энергии) и поставьте «Без ограничений» / отключите оптимизацию. Иначе Android убьёт сервис ночью или в фоне."
+                    title = "Батарея и автозапуск",
+                    body = "В настройках приложения (кнопка «Настройки приложения» ниже) откройте Батарея → «Без ограничений» и, если есть, включите автозапуск. Иначе Android может остановить сервис в фоне или ночью."
                 )
                 HelpStep(
                     number = "4",
-                    title = "Автозапуск (Xiaomi, Huawei, Oppo)",
-                    body = "В настройках приложения включите автозапуск и снимите ограничения фона. На части оболочек пункт называется «Автозапуск» или «Запуск приложений»."
+                    title = "Xiaomi, Huawei, Oppo и похожие",
+                    body = "На некоторых оболочках пункты автозапуска называются иначе (например, «Автозапуск» или «Запуск приложений») и находятся в отдельном системном приложении, а не в настройках FeedBlocker."
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(
@@ -372,14 +345,14 @@ private fun SetupHelpDialog(
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(containerColor = Mint, contentColor = colors.onPrimary)
                 ) {
-                    Text("Открыть доступность")
+                    Text("Специальные возможности")
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedButton(
                     onClick = onOpenAppSettings,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Открыть настройки приложения")
+                    Text("Настройки приложения (батарея, автозапуск)")
                 }
                 TextButton(
                     onClick = onDismiss,
