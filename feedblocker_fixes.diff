@@ -1,0 +1,551 @@
+diff --git a/README.md b/README.md
+index 5a6dc77..c24d83c 100644
+--- a/README.md
++++ b/README.md
+@@ -1,42 +1,82 @@
+ # FeedBlocker
+ 
+-An Android app that blocks the recommendation feeds in TikTok (For You) and YouTube Shorts.
++An Android app that blocks the recommendation feeds in TikTok (For You) and YouTube Shorts — without an internet connection, without an account, and without collecting any data.
+ 
+-Helps you avoid endless scrolling: as soon as the app detects that you've opened a recommendation feed, it automatically sends you back to the home screen.
++Helps you avoid endless scrolling: as soon as the app detects that you've opened a recommendation feed, it automatically backs out of it.
+ 
+ ## How it works
+ 
+ FeedBlocker uses a standard Android system mechanism — **AccessibilityService**. This is the same API that powers screen readers for visually impaired users, as well as other digital wellbeing apps (Digital Wellbeing, Opal, One Sec).
+ 
+-The service reads the structure of elements already rendered on screen, detects when the TikTok "For You" feed or YouTube Shorts is open, and in that case triggers the system's Home button action.
++The service is restricted (via `accessibility_service_config.xml`) to receive events only from TikTok and YouTube, so it never sees anything happening in other apps. When it detects the "Рекомендации" ("For You") tab in TikTok, it switches you to the Friends tab (or, if that fails, simply goes back); when it detects the YouTube Shorts player container, it goes back immediately.
+ 
+-**Note**: TikTok and YouTube periodically change their internal layout with app updates. If blocking stops working after an update — that's expected, it means the resource IDs in the code need to be updated to match the new version. I'll try to keep it up to date.
++**Note**: TikTok and YouTube periodically change their internal layout with app updates. If blocking stops working after an update, that's expected — the view IDs and text labels in `FeedBlockerAccessibilityService.kt` need to be updated to match the new version. I'll try to keep it up to date; PRs with updated IDs are very welcome.
+ 
+-## Privacy
++## Turning it on and off
++
++- **Main toggle** — turns the app's own "I want to be protected" state on or off. It does **not** jump you into system settings; it only remembers your choice locally.
++- **"i" button** — opens a short setup guide with two dedicated buttons: one opens system **Accessibility settings** (required once, Android won't let apps enable this permission programmatically), the other opens the app's own **Settings page** (for battery/autostart exceptions on MIUI, Huawei, Oppo, etc.).
++- **"Turn off blocking for 5 minutes"** — a quick pause, also available as an action on the persistent notification, for when you genuinely need to watch something in the feed.
++
++If Accessibility isn't enabled yet, the home screen shows a short reminder pointing at the "i" button — the toggle itself won't silently fail without an explanation.
++
++## Privacy & permissions
+ 
+ FeedBlocker does **not collect, store, or transmit** any data from the screen or any personal information. The app doesn't use an internet connection and has no analytics or trackers. All processing happens locally, on the device itself.
+ 
+-The entire source code is open and available in this repository — feel free to verify this yourself.
++It requests only the permissions it actually uses:
++
++| Permission | What it's for |
++|---|---|
++| `BIND_ACCESSIBILITY_SERVICE` (via the service declaration) | Lets the service read on-screen structure for TikTok/YouTube only, and trigger the Back action |
++| `POST_NOTIFICATIONS` | The persistent "protection is active" notification, with a quick "pause 5 min" action |
++| `RECEIVE_BOOT_COMPLETED` | Silently restores that notification after a reboot (see below) — it never opens the app UI on its own |
++
++There's no `SYSTEM_ALERT_WINDOW` ("draw over other apps") and no foreground-service permission — earlier builds requested both, but nothing in the code ever used them, so they were dropped.
++
++The entire source code is open and available in this repository — feel free to verify all of this yourself.
++
++## What happens after a reboot
++
++Android automatically re-binds an AccessibilityService that was already enabled in system settings — the app doesn't need to do anything for that. The only thing that doesn't survive a reboot is the ongoing notification (it's a regular notification, not tied to a foreground service), so `BootReceiver` quietly re-shows it if protection should be active. It never opens `MainActivity` on boot.
+ 
+ ## Features
+ 
+ - Blocks the "For You" feed in TikTok
+ - Blocks YouTube Shorts
+-- Simple, minimal interface
++- 5-minute pause, from the app or from the notification
++- Simple, minimal interface, light and dark theme
++- Zero network permissions, zero tracking
+ 
+ ## Installation
+ 
+ 1. Go to the [Releases](../../releases) section
+ 2. Download the latest `.apk` file
+ 3. Install it manually (you may need to allow "Install from unknown sources" for your file manager/browser)
+-4. Open the app and tap **Как настроить** (the **i** button) for a step-by-step guide
+-5. Enable the AccessibilityService and remove battery restrictions as described there (especially on Xiaomi/MIUI/HyperOS)
++4. Open the app and tap the **i** button for a step-by-step guide
++5. Enable the Accessibility service and, if prompted, remove battery restrictions (especially important on Xiaomi/MIUI/HyperOS, Huawei, Oppo)
+ 
+ ## Tech stack
+ 
+ - Kotlin
+-- Jetpack Compose
++- Jetpack Compose (Material 3)
+ - AccessibilityService API
++- No third-party dependencies beyond AndroidX/Compose — no network, no ads/analytics SDKs
++
++## Building from source
++
++```bash
++git clone https://github.com/ivanovichtor-crypto/FeedBlocker.git
++cd FeedBlocker
++./gradlew assembleDebug
++```
++
++Requires JDK 17+ and the Android SDK (`compileSdk 36`, `minSdk 26`). Gradle will pull dependencies from Google's and Maven Central's repositories on first run.
++
++## Known limitations
++
++- Detection is based on matching visible text ("Рекомендации", "Друзья") and view IDs, so it currently expects the TikTok/YouTube UI language and layout it was built against; if TikTok/YouTube ship a redesign or a different locale's wording, blocking may stop working until the app is updated.
++- Some OEM battery managers (MIUI, EMUI, ColorOS, etc.) can still kill the accessibility service in the background regardless of in-app settings; the app can only point you to the right system screen, not force the OS to comply.
+ 
+ ## Feedback
+ 
+diff --git a/app/build.gradle.kts b/app/build.gradle.kts
+index 12096fe..aacb592 100644
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -1,5 +1,6 @@
+ plugins {
+     alias(libs.plugins.android.application)
++    alias(libs.plugins.kotlin.android)
+     alias(libs.plugins.kotlin.compose)
+ }
+ 
+@@ -49,7 +50,6 @@ dependencies {
+     implementation(libs.androidx.compose.ui.tooling.preview)
+     implementation(libs.androidx.core.ktx)
+     implementation(libs.androidx.lifecycle.runtime.ktx)
+-    implementation("androidx.appcompat:appcompat:1.7.0")
+     testImplementation(libs.junit)
+     androidTestImplementation(platform(libs.androidx.compose.bom))
+     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
+index e72b815..3727cf0 100644
+--- a/app/src/main/AndroidManifest.xml
++++ b/app/src/main/AndroidManifest.xml
+@@ -1,20 +1,16 @@
+ <?xml version="1.0" encoding="utf-8"?>
+ <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+ 
+-    <!-- Разрешение на показ окна поверх других приложений -->
+-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+     <!-- Разрешение на показ уведомлений -->
+     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+-    <!-- Разрешение на прием системного события загрузки (Автозапуск) -->
++    <!-- Разрешение на прием системного события загрузки (для восстановления уведомления) -->
+     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+ 
+     <application
+         android:allowBackup="true"
+         android:icon="@mipmap/ic_launcher"
+         android:label="@string/app_name"
+-        android:theme="@style/Theme.AppCompat.Light.NoActionBar">
++        android:theme="@style/Theme.FeedBlocker">
+ 
+         <!-- Главный экран приложения -->
+         <activity
+@@ -39,22 +35,12 @@
+                 android:resource="@xml/accessibility_service_config" />
+         </service>
+ 
+-        <!-- KeepAliveService (Защита от убийства системой) -->
+-        <service
+-            android:name=".KeepAliveService"
+-            android:exported="false"
+-            android:foregroundServiceType="specialUse">
+-            <property
+-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+-                android:value="Keeps feed blocking available while the accessibility service runs" />
+-        </service>
+-
+         <!-- Получатель нажатия кнопки "Пауза" в уведомлении -->
+         <receiver
+             android:name=".PauseNotificationReceiver"
+             android:exported="false" />
+ 
+-        <!-- ЕДИНСТВЕННЫЙ BootReceiver (Автозапуск) -->
++        <!-- BootReceiver: тихо восстанавливает уведомление о работе блокировки после перезагрузки -->
+         <receiver
+             android:name=".BootReceiver"
+             android:enabled="true"
+diff --git a/app/src/main/java/com/example/feedblocker/AccessibilityStatus.kt b/app/src/main/java/com/example/feedblocker/AccessibilityStatus.kt
+new file mode 100644
+index 0000000..156ede3
+--- /dev/null
++++ b/app/src/main/java/com/example/feedblocker/AccessibilityStatus.kt
+@@ -0,0 +1,19 @@
++package com.example.feedblocker
++
++import android.content.Context
++import android.provider.Settings
++
++/**
++ * Проверка, включена ли наша AccessibilityService в системных настройках.
++ * Раньше эта же логика была продублирована в MainActivity и требовалась
++ * ещё и в BootReceiver — вынесена сюда, чтобы не разъезжаться в двух местах.
++ */
++object AccessibilityStatus {
++    fun isEnabled(context: Context): Boolean {
++        val service = Settings.Secure.getString(
++            context.contentResolver,
++            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
++        )
++        return service?.contains("${context.packageName}/.FeedBlockerAccessibilityService") == true
++    }
++}
+diff --git a/app/src/main/java/com/example/feedblocker/BootReceiver.kt b/app/src/main/java/com/example/feedblocker/BootReceiver.kt
+index 960365c..2cd466a 100644
+--- a/app/src/main/java/com/example/feedblocker/BootReceiver.kt
++++ b/app/src/main/java/com/example/feedblocker/BootReceiver.kt
+@@ -4,19 +4,40 @@ import android.content.BroadcastReceiver
+ import android.content.Context
+ import android.content.Intent
+ import android.util.Log
++
+ class BootReceiver : BroadcastReceiver() {
+ 
+     override fun onReceive(context: Context, intent: Intent) {
+-        if (intent.action == Intent.ACTION_BOOT_COMPLETED ||
+-            intent.action == Intent.ACTION_LOCKED_BOOT_COMPLETED ||
+-            intent.action == "android.intent.action.QUICKBOOT_POWERON") {
++        if (intent.action != Intent.ACTION_BOOT_COMPLETED &&
++            intent.action != Intent.ACTION_LOCKED_BOOT_COMPLETED &&
++            intent.action != "android.intent.action.QUICKBOOT_POWERON"
++        ) {
++            return
++        }
+ 
+-            Log.d("FeedBlocker", "📱 Телефон загружен, запускаем приложение")
++        Log.d("FeedBlocker", "Загрузка устройства завершена")
+ 
+-            // Запускаем MainActivity, чтобы приложение и его настройки "поднялись"
+-            val i = Intent(context, MainActivity::class.java)
+-            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+-            context.startActivity(i)
++        // Важно: тут НЕ нужно запускать MainActivity.
++        // 1) Если AccessibilityService уже была включена пользователем
++        //    в системных настройках раньше, система сама подключит её
++        //    заново после перезагрузки — приложению для этого ничего
++        //    делать не нужно.
++        // 2) Все настройки (blocking_enabled, pause_until) хранятся в
++        //    SharedPreferences и переживают перезагрузку сами по себе.
++        // Открывать интерфейс приложения поверх экрана пользователя сразу
++        // после загрузки телефона — плохой UX, а на Android 10+ система
++        // и так почти наверняка блокирует такой запуск Activity в фоне.
++        //
++        // Единственное, что реально "не переживает" перезагрузку — это
++        // постоянное уведомление о работе блокировки (оно обычное, а не
++        // от foreground-сервиса). Тихо восстанавливаем его здесь, если
++        // защита должна быть активна.
++        if (PrefsHelper.isBlockingEnabled(context) &&
++            !PrefsHelper.isPaused(context) &&
++            AccessibilityStatus.isEnabled(context)
++        ) {
++            NotificationHelper.createNotificationChannel(context)
++            NotificationHelper.showActiveNotification(context)
+         }
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/app/src/main/java/com/example/feedblocker/FeedBlockerAccessibilityService.kt b/app/src/main/java/com/example/feedblocker/FeedBlockerAccessibilityService.kt
+index dee1647..8e674cd 100644
+--- a/app/src/main/java/com/example/feedblocker/FeedBlockerAccessibilityService.kt
++++ b/app/src/main/java/com/example/feedblocker/FeedBlockerAccessibilityService.kt
+@@ -24,6 +24,11 @@ class FeedBlockerAccessibilityService : AccessibilityService() {
+     private var pauseUntilCached = 0L
+     private var lastPauseCheckElapsed = 0L
+ 
++    // Один переиспользуемый Handler вместо создания нового объекта
++    // на каждое заблокированное появление ленты TikTok.
++    private val mainHandler = Handler(Looper.getMainLooper())
++    private val resetBlockingFlag = Runnable { isBlocking = false }
++
+     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+         if (event == null || isBlocking) return
+ 
+@@ -35,15 +40,19 @@ class FeedBlockerAccessibilityService : AccessibilityService() {
+             return
+         }
+ 
+-        if (!PrefsHelper.isBlockingEnabled(this) || isPausedCached()) return
++        // Сначала — самые дешёвые проверки в памяти (пакет и троттлинг),
++        // и только потом — чтение SharedPreferences. Раньше порядок был
++        // обратным, из-за чего PrefsHelper дёргался на каждое событие
++        // скролла внутри уже отброшенного 800-мс окна.
++        val packageName = event.packageName?.toString() ?: return
++        if (packageName != TIKTOK_PACKAGE && packageName != YOUTUBE_PACKAGE) return
+ 
+         val now = SystemClock.elapsedRealtime()
+         if (now - lastBlockTime < MIN_INTERVAL_MS) return
+ 
+-        val packageName = event.packageName?.toString() ?: return
+-        if (packageName != TIKTOK_PACKAGE && packageName != YOUTUBE_PACKAGE) return
++        if (!PrefsHelper.isBlockingEnabled(this) || isPausedCached(now)) return
+ 
+-        val started = if (BuildConfig.DEBUG) SystemClock.elapsedRealtime() else 0L
++        val started = if (BuildConfig.DEBUG) now else 0L
+         val root = rootInActiveWindow ?: return
+         try {
+             when (packageName) {
+@@ -51,6 +60,7 @@ class FeedBlockerAccessibilityService : AccessibilityService() {
+                 YOUTUBE_PACKAGE -> handleYouTube(root)
+             }
+         } finally {
++            recycleNode(root)
+             if (BuildConfig.DEBUG) {
+                 val dt = SystemClock.elapsedRealtime() - started
+                 if (dt > SLOW_EVENT_MS) {
+@@ -60,10 +70,9 @@ class FeedBlockerAccessibilityService : AccessibilityService() {
+         }
+     }
+ 
+-    private fun isPausedCached(): Boolean {
+-        val elapsed = SystemClock.elapsedRealtime()
+-        if (elapsed - lastPauseCheckElapsed >= PAUSE_CACHE_MS) {
+-            lastPauseCheckElapsed = elapsed
++    private fun isPausedCached(nowElapsed: Long): Boolean {
++        if (nowElapsed - lastPauseCheckElapsed >= PAUSE_CACHE_MS) {
++            lastPauseCheckElapsed = nowElapsed
+             pauseUntilCached = PrefsHelper.getPauseUntil(this)
+         }
+         return System.currentTimeMillis() < pauseUntilCached
+@@ -85,9 +94,8 @@ class FeedBlockerAccessibilityService : AccessibilityService() {
+             performGlobalAction(GLOBAL_ACTION_BACK)
+         }
+ 
+-        Handler(Looper.getMainLooper()).postDelayed({
+-            isBlocking = false
+-        }, MIN_INTERVAL_MS)
++        mainHandler.removeCallbacks(resetBlockingFlag)
++        mainHandler.postDelayed(resetBlockingFlag, MIN_INTERVAL_MS)
+     }
+ 
+     private fun switchToFriendsTab(root: AccessibilityNodeInfo): Boolean {
+@@ -107,8 +115,12 @@ class FeedBlockerAccessibilityService : AccessibilityService() {
+                 val friendsIndex = 1
+                 if (navContainer.childCount > friendsIndex) {
+                     val friendsTab = navContainer.getChild(friendsIndex)
+-                    if (friendsTab != null && clickNodeOrClickableParent(friendsTab)) {
+-                        return true
++                    if (friendsTab != null) {
++                        try {
++                            if (clickNodeOrClickableParent(friendsTab)) return true
++                        } finally {
++                            recycleNode(friendsTab)
++                        }
+                     }
+                 }
+             }
+@@ -137,9 +149,12 @@ class FeedBlockerAccessibilityService : AccessibilityService() {
+         while (parent != null) {
+             if (parent.isClickable) {
+                 parent.performAction(AccessibilityNodeInfo.ACTION_CLICK)
++                recycleNode(parent)
+                 return true
+             }
+-            parent = parent.parent
++            val next = parent.parent
++            recycleNode(parent)
++            parent = next
+         }
+         return false
+     }
+@@ -158,12 +173,16 @@ class FeedBlockerAccessibilityService : AccessibilityService() {
+     }
+ 
+     @Suppress("DEPRECATION")
++    private fun recycleNode(node: AccessibilityNodeInfo) {
++        try {
++            node.recycle()
++        } catch (_: Exception) {
++        }
++    }
++
+     private fun recycleNodes(nodes: List<AccessibilityNodeInfo>) {
+         for (node in nodes) {
+-            try {
+-                node.recycle()
+-            } catch (_: Exception) {
+-            }
++            recycleNode(node)
+         }
+     }
+ 
+@@ -176,4 +195,9 @@ class FeedBlockerAccessibilityService : AccessibilityService() {
+         lastPauseCheckElapsed = 0L
+         Log.d(TAG, "Сервис запущен и подключён")
+     }
++
++    override fun onDestroy() {
++        super.onDestroy()
++        mainHandler.removeCallbacks(resetBlockingFlag)
++    }
+ }
+diff --git a/app/src/main/java/com/example/feedblocker/MainActivity.kt b/app/src/main/java/com/example/feedblocker/MainActivity.kt
+index f645100..05d6bce 100644
+--- a/app/src/main/java/com/example/feedblocker/MainActivity.kt
++++ b/app/src/main/java/com/example/feedblocker/MainActivity.kt
+@@ -1,14 +1,8 @@
+ package com.example.feedblocker
+ 
+-import android.app.NotificationChannel
+-import android.app.NotificationManager
+-import android.app.Service
+-import android.content.Context
+ import android.content.Intent
+ import android.net.Uri
+-import android.os.Build
+ import android.os.Bundle
+-import android.os.IBinder
+ import android.provider.Settings
+ import androidx.activity.ComponentActivity
+ import androidx.activity.compose.setContent
+@@ -22,7 +16,6 @@ import androidx.compose.runtime.mutableLongStateOf
+ import androidx.compose.runtime.mutableStateOf
+ import androidx.compose.runtime.setValue
+ import androidx.compose.ui.Modifier
+-import androidx.core.app.NotificationCompat
+ import com.example.feedblocker.ui.MainScreen
+ import com.example.feedblocker.ui.theme.FeedBlockerTheme
+ import kotlinx.coroutines.delay
+@@ -75,7 +68,7 @@ class MainActivity : ComponentActivity() {
+                                 PrefsHelper.clearPause(this)
+                                 blockingEnabled = true
+                                 pauseRemainingMs = 0L
+-                                if (isAccessibilityServiceEnabled()) {
++                                if (AccessibilityStatus.isEnabled(this)) {
+                                     NotificationHelper.showActiveNotification(this)
+                                 }
+                             } else {
+@@ -96,7 +89,7 @@ class MainActivity : ComponentActivity() {
+                             PrefsHelper.clearPause(this)
+                             blockingEnabled = true
+                             pauseRemainingMs = 0L
+-                            if (isAccessibilityServiceEnabled()) {
++                            if (AccessibilityStatus.isEnabled(this)) {
+                                 NotificationHelper.showActiveNotification(this)
+                             }
+                         }
+@@ -117,46 +110,8 @@ class MainActivity : ComponentActivity() {
+     }
+ 
+     private fun refreshStatus() {
+-        serviceEnabled = isAccessibilityServiceEnabled()
++        serviceEnabled = AccessibilityStatus.isEnabled(this)
+         blockingEnabled = PrefsHelper.isBlockingEnabled(this)
+         pauseRemainingMs = PrefsHelper.remainingPauseMillis(this)
+     }
+-
+-    private fun isAccessibilityServiceEnabled(): Boolean {
+-        val service = Settings.Secure.getString(
+-            contentResolver,
+-            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+-        )
+-        return service?.contains("$packageName/.FeedBlockerAccessibilityService") == true
+-    }
+-}
+-
+-class KeepAliveService : Service() {
+-    override fun onBind(intent: Intent?): IBinder? = null
+-
+-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+-            val channel = NotificationChannel(
+-            "feed_blocker_channel",
+-            "Blocking Service",
+-            NotificationManager.IMPORTANCE_LOW
+-        )
+-        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+-        manager.createNotificationChannel(channel)
+-        val notification = NotificationCompat.Builder(this, "feed_blocker_channel")
+-            .setContentTitle("Блокировщик лент работает")
+-            .setContentText("Сервис активен и защищает вас от лент")
+-            .setSmallIcon(android.R.drawable.ic_lock_lock)
+-            .setOngoing(true)
+-            .build()
+-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+-            startForeground(
+-                1,
+-                notification,
+-                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+-            )
+-        } else {
+-            startForeground(1, notification)
+-        }
+-        return START_STICKY
+-    }
+ }
+diff --git a/app/src/main/res/layout/activity_main.xml b/app/src/main/res/layout/activity_main.xml
+deleted file mode 100644
+index 05f47fa..0000000
+--- a/app/src/main/res/layout/activity_main.xml
++++ /dev/null
+@@ -1,30 +0,0 @@
+-<?xml version="1.0" encoding="utf-8"?>
+-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+-    android:layout_width="match_parent"
+-    android:layout_height="match_parent"
+-    android:orientation="vertical"
+-    android:gravity="center"
+-    android:padding="24dp">
+-
+-    <TextView
+-        android:id="@+id/statusText"
+-        android:layout_width="wrap_content"
+-        android:layout_height="wrap_content"
+-        android:text="Сервис не включён"
+-        android:textSize="18sp"
+-        android:layout_marginBottom="24dp" />
+-
+-    <Button
+-        android:id="@+id/enableServiceButton"
+-        android:layout_width="wrap_content"
+-        android:layout_height="wrap_content"
+-        android:text="Включить сервис в настройках" />
+-
+-    <Button
+-        android:id="@+id/pauseButton"
+-        android:layout_width="wrap_content"
+-        android:layout_height="wrap_content"
+-        android:layout_marginTop="16dp"
+-        android:text="Пауза на 5 минут" />
+-
+-</LinearLayout>
+\ No newline at end of file
+diff --git a/app/src/main/res/values/colors.xml b/app/src/main/res/values/colors.xml
+deleted file mode 100644
+index f8c6127..0000000
+--- a/app/src/main/res/values/colors.xml
++++ /dev/null
+@@ -1,10 +0,0 @@
+-<?xml version="1.0" encoding="utf-8"?>
+-<resources>
+-    <color name="purple_200">#FFBB86FC</color>
+-    <color name="purple_500">#FF6200EE</color>
+-    <color name="purple_700">#FF3700B3</color>
+-    <color name="teal_200">#FF03DAC5</color>
+-    <color name="teal_700">#FF018786</color>
+-    <color name="black">#FF000000</color>
+-    <color name="white">#FFFFFFFF</color>
+-</resources>
+\ No newline at end of file
+diff --git a/build.gradle.kts b/build.gradle.kts
+index 18318be..952b930 100644
+--- a/build.gradle.kts
++++ b/build.gradle.kts
+@@ -1,5 +1,6 @@
+ // Top-level build file where you can add configuration options common to all sub-projects/modules.
+ plugins {
+     alias(libs.plugins.android.application) apply false
++    alias(libs.plugins.kotlin.android) apply false
+     alias(libs.plugins.kotlin.compose) apply false
+ }
+\ No newline at end of file
+diff --git a/gradle/libs.versions.toml b/gradle/libs.versions.toml
+index 08911ae..53abb73 100644
+--- a/gradle/libs.versions.toml
++++ b/gradle/libs.versions.toml
+@@ -27,5 +27,6 @@ androidx-compose-material3 = { group = "androidx.compose.material3", name = "mat
+ 
+ [plugins]
+ android-application = { id = "com.android.application", version.ref = "agp" }
++kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+ kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+ 

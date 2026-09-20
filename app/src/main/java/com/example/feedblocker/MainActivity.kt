@@ -1,14 +1,8 @@
 package com.example.feedblocker
 
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.Service
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
-import android.os.IBinder
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -22,7 +16,6 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.core.app.NotificationCompat
 import com.example.feedblocker.ui.MainScreen
 import com.example.feedblocker.ui.theme.FeedBlockerTheme
 import kotlinx.coroutines.delay
@@ -75,7 +68,7 @@ class MainActivity : ComponentActivity() {
                                 PrefsHelper.clearPause(this)
                                 blockingEnabled = true
                                 pauseRemainingMs = 0L
-                                if (isAccessibilityServiceEnabled()) {
+                                if (AccessibilityStatus.isEnabled(this)) {
                                     NotificationHelper.showActiveNotification(this)
                                 }
                             } else {
@@ -96,7 +89,7 @@ class MainActivity : ComponentActivity() {
                             PrefsHelper.clearPause(this)
                             blockingEnabled = true
                             pauseRemainingMs = 0L
-                            if (isAccessibilityServiceEnabled()) {
+                            if (AccessibilityStatus.isEnabled(this)) {
                                 NotificationHelper.showActiveNotification(this)
                             }
                         }
@@ -117,46 +110,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun refreshStatus() {
-        serviceEnabled = isAccessibilityServiceEnabled()
+        serviceEnabled = AccessibilityStatus.isEnabled(this)
         blockingEnabled = PrefsHelper.isBlockingEnabled(this)
         pauseRemainingMs = PrefsHelper.remainingPauseMillis(this)
-    }
-
-    private fun isAccessibilityServiceEnabled(): Boolean {
-        val service = Settings.Secure.getString(
-            contentResolver,
-            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-        )
-        return service?.contains("$packageName/.FeedBlockerAccessibilityService") == true
-    }
-}
-
-class KeepAliveService : Service() {
-    override fun onBind(intent: Intent?): IBinder? = null
-
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-            val channel = NotificationChannel(
-            "feed_blocker_channel",
-            "Blocking Service",
-            NotificationManager.IMPORTANCE_LOW
-        )
-        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        manager.createNotificationChannel(channel)
-        val notification = NotificationCompat.Builder(this, "feed_blocker_channel")
-            .setContentTitle("Блокировщик лент работает")
-            .setContentText("Сервис активен и защищает вас от лент")
-            .setSmallIcon(android.R.drawable.ic_lock_lock)
-            .setOngoing(true)
-            .build()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(
-                1,
-                notification,
-                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
-            )
-        } else {
-            startForeground(1, notification)
-        }
-        return START_STICKY
     }
 }
