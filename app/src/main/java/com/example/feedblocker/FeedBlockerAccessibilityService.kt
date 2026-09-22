@@ -24,6 +24,11 @@ class FeedBlockerAccessibilityService : AccessibilityService() {
     private var pauseUntilCached = 0L
     private var lastPauseCheckElapsed = 0L
 
+    // Один переиспользуемый Handler вместо создания нового объекта
+    // на каждое заблокированное появление ленты TikTok.
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val resetBlockingFlag = Runnable { isBlocking = false }
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null || isBlocking) return
 
@@ -35,15 +40,20 @@ class FeedBlockerAccessibilityService : AccessibilityService() {
             return
         }
 
-        if (!PrefsHelper.isBlockingEnabled(this) || isPausedCached()) return
+        // Сначала — самые дешёвые проверки в памяти (пакет и троттлинг),
+        // и только потом — чтение состояния паузы из SharedPreferences
+        // (кешируется на 1 секунду в isPausedCached). Так каждое событие
+        // скролла внутри уже отброшенного 800-мс окна вообще не трогает
+        // SharedPreferences.
+        val packageName = event.packageName?.toString() ?: return
+        if (packageName != TIKTOK_PACKAGE && packageName != YOUTUBE_PACKAGE) return
 
         val now = SystemClock.elapsedRealtime()
         if (now - lastBlockTime < MIN_INTERVAL_MS) return
 
-        val packageName = event.packageName?.toString() ?: return
-        if (packageName != TIKTOK_PACKAGE && packageName != YOUTUBE_PACKAGE) return
+        if (isPausedCached(now)) return
 
-        val started = if (BuildConfig.DEBUG) SystemClock.elapsedRealtime() else 0L
+        val started = if (BuildConfig.DEBUG) now else 0L
         val root = rootInActiveWindow ?: return
         try {
             when (packageName) {
@@ -51,6 +61,7 @@ class FeedBlockerAccessibilityService : AccessibilityService() {
                 YOUTUBE_PACKAGE -> handleYouTube(root)
             }
         } finally {
+            recycleNode(root)
             if (BuildConfig.DEBUG) {
                 val dt = SystemClock.elapsedRealtime() - started
                 if (dt > SLOW_EVENT_MS) {
@@ -60,10 +71,9 @@ class FeedBlockerAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun isPausedCached(): Boolean {
-        val elapsed = SystemClock.elapsedRealtime()
-        if (elapsed - lastPauseCheckElapsed >= PAUSE_CACHE_MS) {
-            lastPauseCheckElapsed = elapsed
+    private fun isPausedCached(nowElapsed: Long): Boolean {
+        if (nowElapsed - lastPauseCheckElapsed >= PAUSE_CACHE_MS) {
+            lastPauseCheckElapsed = nowElapsed
             pauseUntilCached = PrefsHelper.getPauseUntil(this)
         }
         return System.currentTimeMillis() < pauseUntilCached
@@ -85,9 +95,8 @@ class FeedBlockerAccessibilityService : AccessibilityService() {
             performGlobalAction(GLOBAL_ACTION_BACK)
         }
 
-        Handler(Looper.getMainLooper()).postDelayed({
-            isBlocking = false
-        }, MIN_INTERVAL_MS)
+        mainHandler.removeCallbacks(resetBlockingFlag)
+        mainHandler.postDelayed(resetBlockingFlag, MIN_INTERVAL_MS)
     }
 
     private fun switchToFriendsTab(root: AccessibilityNodeInfo): Boolean {
@@ -107,8 +116,12 @@ class FeedBlockerAccessibilityService : AccessibilityService() {
                 val friendsIndex = 1
                 if (navContainer.childCount > friendsIndex) {
                     val friendsTab = navContainer.getChild(friendsIndex)
-                    if (friendsTab != null && clickNodeOrClickableParent(friendsTab)) {
-                        return true
+                    if (friendsTab != null) {
+                        try {
+                            if (clickNodeOrClickableParent(friendsTab)) return true
+                        } finally {
+                            recycleNode(friendsTab)
+                        }
                     }
                 }
             }
@@ -137,9 +150,12 @@ class FeedBlockerAccessibilityService : AccessibilityService() {
         while (parent != null) {
             if (parent.isClickable) {
                 parent.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                recycleNode(parent)
                 return true
             }
-            parent = parent.parent
+            val next = parent.parent
+            recycleNode(parent)
+            parent = next
         }
         return false
     }
@@ -158,12 +174,16 @@ class FeedBlockerAccessibilityService : AccessibilityService() {
     }
 
     @Suppress("DEPRECATION")
+    private fun recycleNode(node: AccessibilityNodeInfo) {
+        try {
+            node.recycle()
+        } catch (_: Exception) {
+        }
+    }
+
     private fun recycleNodes(nodes: List<AccessibilityNodeInfo>) {
         for (node in nodes) {
-            try {
-                node.recycle()
-            } catch (_: Exception) {
-            }
+            recycleNode(node)
         }
     }
 
@@ -175,5 +195,10 @@ class FeedBlockerAccessibilityService : AccessibilityService() {
         super.onServiceConnected()
         lastPauseCheckElapsed = 0L
         Log.d(TAG, "Сервис запущен и подключён")
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        mainHandler.removeCallbacks(resetBlockingFlag)
     }
 }

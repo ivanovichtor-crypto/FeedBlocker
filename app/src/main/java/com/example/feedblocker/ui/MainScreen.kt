@@ -1,11 +1,5 @@
 package com.example.feedblocker.ui
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -16,13 +10,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -33,7 +24,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,13 +31,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.toggleableState
-import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -56,20 +39,22 @@ import androidx.compose.ui.window.Dialog
 import com.example.feedblocker.ui.theme.FeedBlockerTheme
 import com.example.feedblocker.ui.theme.Mint
 
+/**
+ * Главный экран. Ручного переключателя защиты больше нет: блокировка
+ * работает всегда, как только включён сервис доступности — единственное
+ * временное исключение — кнопка паузы на 5 минут.
+ */
 @Composable
 fun MainScreen(
     modifier: Modifier = Modifier,
     isServiceEnabled: Boolean,
-    isBlockingEnabled: Boolean,
     pauseRemainingMs: Long,
     onEnableServiceClick: () -> Unit,
     onOpenBatterySettingsClick: () -> Unit,
-    onToggleService: (Boolean) -> Unit,
     onPauseClick: () -> Unit,
     onResumeClick: () -> Unit
 ) {
     val isPaused = pauseRemainingMs > 0L
-    val protectionOn = isServiceEnabled && isBlockingEnabled && !isPaused
     val colors = MaterialTheme.colorScheme
     var showSetupHelp by remember { mutableStateOf(false) }
 
@@ -106,67 +91,12 @@ fun MainScreen(
 
         StatusCard(
             isServiceEnabled = isServiceEnabled,
-            isBlockingEnabled = isBlockingEnabled,
             isPaused = isPaused,
             pauseRemainingMs = pauseRemainingMs
         )
 
-        Spacer(modifier = Modifier.height(20.dp))
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = colors.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Защита",
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 18.sp,
-                        color = colors.onSurface
-                    )
-                    Text(
-                        text = if (protectionOn) "TikTok и Shorts блокируются" else "Ленты сейчас не фильтруются",
-                        fontSize = 13.sp,
-                        color = colors.onSurfaceVariant
-                    )
-                }
-                ProtectionSwitch(
-                    checked = protectionOn,
-                    onCheckedChange = { checked ->
-                        // Тумблер больше никуда не "телепортирует" пользователя.
-                        // Он только меняет локальное состояние блокировки.
-                        // Переход в системные настройки доступности вынесен
-                        // в отдельные кнопки внутри диалога помощи (кнопка "i").
-                        if (checked && isPaused) {
-                            onResumeClick()
-                        } else {
-                            onToggleService(checked)
-                        }
-                    }
-                )
-            }
-        }
-
-        if (!isServiceEnabled) {
-            Spacer(modifier = Modifier.height(10.dp))
-            Text(
-                text = "Сервис доступности ещё не включён — блокировка не сработает, пока вы не разрешите его в настройках. Нажмите «i» вверху экрана.",
-                fontSize = 12.sp,
-                color = colors.error,
-                lineHeight = 16.sp
-            )
-        }
-
-        if (isBlockingEnabled) {
-            Spacer(modifier = Modifier.height(12.dp))
+        if (isServiceEnabled) {
+            Spacer(modifier = Modifier.height(20.dp))
             if (isPaused) {
                 Button(
                     onClick = onResumeClick,
@@ -191,65 +121,6 @@ fun MainScreen(
             onDismiss = { showSetupHelp = false },
             onOpenAccessibility = onEnableServiceClick,
             onOpenAppSettings = onOpenBatterySettingsClick
-        )
-    }
-}
-
-@Composable
-private fun ProtectionSwitch(
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
-) {
-    val colors = MaterialTheme.colorScheme
-    val thumbOffset by animateDpAsState(
-        targetValue = if (checked) 28.dp else 4.dp,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMediumLow
-        ),
-        label = "thumbOffset"
-    )
-    val trackColor by animateColorAsState(
-        targetValue = if (checked) Mint else colors.outline,
-        animationSpec = tween(durationMillis = 220),
-        label = "trackColor"
-    )
-    val thumbColor by animateColorAsState(
-        targetValue = if (checked) Color.White else colors.onSurface,
-        animationSpec = tween(durationMillis = 220),
-        label = "thumbColor"
-    )
-    val scale = remember { Animatable(1f) }
-    LaunchedEffect(checked) {
-        scale.snapTo(0.86f)
-        scale.animateTo(
-            1f,
-            spring(
-                dampingRatio = Spring.DampingRatioMediumBouncy,
-                stiffness = Spring.StiffnessMedium
-            )
-        )
-    }
-
-    Box(
-        modifier = Modifier
-            .width(56.dp)
-            .height(32.dp)
-            .scale(scale.value)
-            .clip(RoundedCornerShape(16.dp))
-            .background(trackColor)
-            .semantics {
-                role = Role.Switch
-                toggleableState = if (checked) ToggleableState.On else ToggleableState.Off
-            }
-            .clickable { onCheckedChange(!checked) }
-    ) {
-        Box(
-            modifier = Modifier
-                .offset(x = thumbOffset, y = 4.dp)
-                .size(24.dp)
-                .clip(CircleShape)
-                .background(thumbColor)
         )
     }
 }
@@ -313,7 +184,7 @@ private fun SetupHelpDialog(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Тумблер на главном экране только включает и выключает защиту внутри приложения. Разрешения нужно выдать вручную, один раз — используйте кнопки внизу.",
+                    text = "Защита работает автоматически, как только сервис доступности включён в системных настройках — отдельного переключателя в приложении нет. Разрешения нужно выдать вручную, один раз — используйте кнопки внизу.",
                     fontSize = 13.sp,
                     color = colors.onSurfaceVariant,
                     lineHeight = 18.sp
@@ -321,24 +192,36 @@ private fun SetupHelpDialog(
                 Spacer(modifier = Modifier.height(16.dp))
                 HelpStep(
                     number = "1",
+                    title = "Разрешить ограниченные настройки",
+                    body = "Приложение установлено не из Google Play, поэтому Android (начиная с 13-й версии) по умолчанию скрывает переключатель доступности для него. Откройте настройки приложения (кнопка ниже) → нажмите на три точки в правом верхнем углу → «Разрешить ограниченные настройки» → подтвердите. Без этого шага включить сервис доступности не получится."
+                )
+                HelpStep(
+                    number = "2",
                     title = "Специальные возможности",
                     body = "Настройки → Специальные возможности → Скачанные приложения → FeedBlocker. Включите верхний тумблер. Без этого приложение не видит ленту TikTok и YouTube Shorts. Открыть этот экран можно кнопкой «Специальные возможности» ниже."
                 )
                 HelpStep(
-                    number = "2",
+                    number = "3",
                     title = "Уведомления",
                     body = "Если система спросит разрешение на уведомления — разрешите. Через них можно поставить паузу на 5 минут и видеть, что защита включена."
                 )
                 HelpStep(
-                    number = "3",
+                    number = "4",
                     title = "Батарея и автозапуск",
                     body = "В настройках приложения (кнопка «Настройки приложения» ниже) откройте Батарея → «Без ограничений» и, если есть, включите автозапуск. Иначе Android может остановить сервис в фоне или ночью."
                 )
                 HelpStep(
-                    number = "4",
+                    number = "5",
                     title = "Xiaomi, Huawei, Oppo и похожие",
                     body = "На некоторых оболочках пункты автозапуска называются иначе (например, «Автозапуск» или «Запуск приложений») и находятся в отдельном системном приложении, а не в настройках FeedBlocker."
                 )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = onOpenAppSettings,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Настройки приложения (батарея, автозапуск)")
+                }
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(
                     onClick = onOpenAccessibility,
@@ -346,13 +229,6 @@ private fun SetupHelpDialog(
                     colors = ButtonDefaults.buttonColors(containerColor = Mint, contentColor = colors.onPrimary)
                 ) {
                     Text("Специальные возможности")
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedButton(
-                    onClick = onOpenAppSettings,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Настройки приложения (батарея, автозапуск)")
                 }
                 TextButton(
                     onClick = onDismiss,
@@ -390,20 +266,19 @@ private fun HelpStep(number: String, title: String, body: String) {
 @Composable
 private fun StatusCard(
     isServiceEnabled: Boolean,
-    isBlockingEnabled: Boolean,
     isPaused: Boolean,
     pauseRemainingMs: Long
 ) {
     val colors = MaterialTheme.colorScheme
     val (title, subtitle, dotColor) = when {
-        isPaused && isBlockingEnabled -> Triple(
+        isPaused -> Triple(
             "На паузе",
             "Снова включится через ${formatRemaining(pauseRemainingMs)}",
             colors.error
         )
-        isServiceEnabled && isBlockingEnabled -> Triple(
-            "Активна",
-            "Рекомендации TikTok и YouTube Shorts закрываются",
+        isServiceEnabled -> Triple(
+            "Включена",
+            "Защита работает",
             Mint
         )
         else -> Triple(
@@ -449,11 +324,9 @@ private fun MainScreenPreview() {
     FeedBlockerTheme {
         MainScreen(
             isServiceEnabled = true,
-            isBlockingEnabled = true,
             pauseRemainingMs = 0,
             onEnableServiceClick = {},
             onOpenBatterySettingsClick = {},
-            onToggleService = {},
             onPauseClick = {},
             onResumeClick = {}
         )
