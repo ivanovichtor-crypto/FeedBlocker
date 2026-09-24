@@ -47,7 +47,6 @@ class MainActivity : ComponentActivity() {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     MainScreen(
                         modifier = Modifier.padding(innerPadding),
-                        isServiceEnabled = serviceEnabled,
                         pauseRemainingMs = pauseRemainingMs,
                         onEnableServiceClick = {
                             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
@@ -59,6 +58,16 @@ class MainActivity : ComponentActivity() {
                                     Uri.fromParts("package", packageName, null)
                                 )
                             )
+                        },
+                        onOpenAutoStartClick = {
+                            if (!AutoStartHelper.open(this)) {
+                                startActivity(
+                                    Intent(
+                                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                        Uri.fromParts("package", packageName, null)
+                                    )
+                                )
+                            }
                         },
                         onPauseClick = {
                             PrefsHelper.setPause(this, 5 * 60 * 1000L)

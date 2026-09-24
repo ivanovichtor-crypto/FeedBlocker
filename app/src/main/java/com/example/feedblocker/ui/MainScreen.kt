@@ -40,17 +40,17 @@ import com.example.feedblocker.ui.theme.FeedBlockerTheme
 import com.example.feedblocker.ui.theme.Mint
 
 /**
- * Главный экран. Ручного переключателя защиты больше нет: блокировка
- * работает всегда, как только включён сервис доступности — единственное
- * временное исключение — кнопка паузы на 5 минут.
+ * Главный экран. Никакого статус-индикатора: приложение уже настроено
+ * и просто работает. Единственные элементы — кнопка помощи "i" и кнопка
+ * временной паузы на 5 минут.
  */
 @Composable
 fun MainScreen(
     modifier: Modifier = Modifier,
-    isServiceEnabled: Boolean,
     pauseRemainingMs: Long,
     onEnableServiceClick: () -> Unit,
     onOpenBatterySettingsClick: () -> Unit,
+    onOpenAutoStartClick: () -> Unit,
     onPauseClick: () -> Unit,
     onResumeClick: () -> Unit
 ) {
@@ -87,31 +87,28 @@ fun MainScreen(
             HelpButton(onClick = { showSetupHelp = true })
         }
 
-        Spacer(modifier = Modifier.height(28.dp))
+        Spacer(modifier = Modifier.height(40.dp))
 
-        StatusCard(
-            isServiceEnabled = isServiceEnabled,
-            isPaused = isPaused,
-            pauseRemainingMs = pauseRemainingMs
-        )
-
-        if (isServiceEnabled) {
-            Spacer(modifier = Modifier.height(20.dp))
-            if (isPaused) {
-                Button(
-                    onClick = onResumeClick,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = Mint, contentColor = colors.onPrimary)
-                ) {
-                    Text("Снять паузу")
-                }
-            } else {
-                OutlinedButton(
-                    onClick = onPauseClick,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Выключить блокировку на 5 минут")
-                }
+        if (isPaused) {
+            Text(
+                text = "Пауза — лента включится через ${formatRemaining(pauseRemainingMs)}",
+                fontSize = 13.sp,
+                color = colors.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            Button(
+                onClick = onResumeClick,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = Mint, contentColor = colors.onPrimary)
+            ) {
+                Text("Снять паузу")
+            }
+        } else {
+            OutlinedButton(
+                onClick = onPauseClick,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Включить ленту на 5 минут")
             }
         }
     }
@@ -120,7 +117,8 @@ fun MainScreen(
         SetupHelpDialog(
             onDismiss = { showSetupHelp = false },
             onOpenAccessibility = onEnableServiceClick,
-            onOpenAppSettings = onOpenBatterySettingsClick
+            onOpenAppSettings = onOpenBatterySettingsClick,
+            onOpenAutoStart = onOpenAutoStartClick
         )
     }
 }
@@ -163,7 +161,8 @@ private fun HelpButton(onClick: () -> Unit) {
 private fun SetupHelpDialog(
     onDismiss: () -> Unit,
     onOpenAccessibility: () -> Unit,
-    onOpenAppSettings: () -> Unit
+    onOpenAppSettings: () -> Unit,
+    onOpenAutoStart: () -> Unit
 ) {
     val colors = MaterialTheme.colorScheme
     Dialog(onDismissRequest = onDismiss) {
@@ -207,20 +206,27 @@ private fun SetupHelpDialog(
                 )
                 HelpStep(
                     number = "4",
-                    title = "Батарея и автозапуск",
-                    body = "В настройках приложения (кнопка «Настройки приложения» ниже) откройте Батарея → «Без ограничений» и, если есть, включите автозапуск. Иначе Android может остановить сервис в фоне или ночью."
+                    title = "Батарея",
+                    body = "В настройках приложения (кнопка «Настройки приложения» ниже) откройте Батарея → «Без ограничений». Иначе Android может остановить сервис в фоне или ночью."
                 )
                 HelpStep(
                     number = "5",
-                    title = "Xiaomi, Huawei, Oppo и похожие",
-                    body = "На некоторых оболочках пункты автозапуска называются иначе (например, «Автозапуск» или «Запуск приложений») и находятся в отдельном системном приложении, а не в настройках FeedBlocker."
+                    title = "Автозапуск",
+                    body = "Отдельный экран для этого есть почти на всех телефонах не от Google — Xiaomi, Huawei/Honor, Oppo/Realme/OnePlus, Vivo и др. Без включённого автозапуска система может выгружать FeedBlocker из фона, и блокировка перестанет работать. Кнопка «Автозапуск» ниже попробует открыть нужный экран автоматически; " + autoStartHint() + " Если кнопка ничего не открыла — откроется страница приложения, ищите пункт вручную."
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedButton(
                     onClick = onOpenAppSettings,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Настройки приложения (батарея, автозапуск)")
+                    Text("Настройки приложения")
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = onOpenAutoStart,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Автозапуск")
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(
@@ -263,53 +269,9 @@ private fun HelpStep(number: String, title: String, body: String) {
     }
 }
 
-@Composable
-private fun StatusCard(
-    isServiceEnabled: Boolean,
-    isPaused: Boolean,
-    pauseRemainingMs: Long
-) {
-    val colors = MaterialTheme.colorScheme
-    val (title, subtitle, dotColor) = when {
-        isPaused -> Triple(
-            "На паузе",
-            "Снова включится через ${formatRemaining(pauseRemainingMs)}",
-            colors.error
-        )
-        isServiceEnabled -> Triple(
-            "Включена",
-            "Защита работает",
-            Mint
-        )
-        else -> Triple(
-            "Выключена",
-            "Защита сейчас не работает",
-            colors.onSurfaceVariant
-        )
-    }
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = colors.surface)
-    ) {
-        Row(
-            modifier = Modifier.padding(20.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(12.dp)
-                    .clip(CircleShape)
-                    .background(dotColor)
-            )
-            Spacer(modifier = Modifier.size(14.dp))
-            Column {
-                Text(title, fontWeight = FontWeight.SemiBold, fontSize = 18.sp, color = colors.onSurface)
-                Text(subtitle, fontSize = 13.sp, color = colors.onSurfaceVariant)
-            }
-        }
-    }
-}
+/** Короткая подсказка под конкретный производитель телефона (см. AutoStartHelper). */
+private fun autoStartHint(): String =
+    com.example.feedblocker.AutoStartHelper.hintForCurrentDevice()
 
 private fun formatRemaining(ms: Long): String {
     val totalSec = (ms / 1000).coerceAtLeast(0)
@@ -323,10 +285,10 @@ private fun formatRemaining(ms: Long): String {
 private fun MainScreenPreview() {
     FeedBlockerTheme {
         MainScreen(
-            isServiceEnabled = true,
             pauseRemainingMs = 0,
             onEnableServiceClick = {},
             onOpenBatterySettingsClick = {},
+            onOpenAutoStartClick = {},
             onPauseClick = {},
             onResumeClick = {}
         )

@@ -1,6 +1,5 @@
 plugins {
     alias(libs.plugins.android.application)
-        //alias(libs.plugins.kotlin.android) error
     alias(libs.plugins.kotlin.compose)
 }
 
@@ -17,7 +16,7 @@ android {
         minSdk = 26
         targetSdk = 36
         versionCode = 3
-        versionName = "1.3"
+        versionName = "1.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -62,7 +61,7 @@ androidComponents {
     onVariants(selector().all()) { variant ->
         variant.outputs.forEach { output ->
             // Просто подставляем фиксированное название версии
-            output.outputFileName.set("FeedBlocker_v1.3.apk")
+            output.outputFileName.set("FeedBlocker_v1.4.apk")
         }
     }
 }
