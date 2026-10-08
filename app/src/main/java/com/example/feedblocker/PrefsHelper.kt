@@ -32,10 +32,4 @@ object PrefsHelper {
     fun isPaused(context: Context): Boolean {
         return System.currentTimeMillis() < getPauseUntil(context)
     }
-
-    /** Досрочно снять паузу. */
-    fun clearPause(context: Context) {
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit().remove(KEY_PAUSE_UNTIL).apply()
-    }
 }

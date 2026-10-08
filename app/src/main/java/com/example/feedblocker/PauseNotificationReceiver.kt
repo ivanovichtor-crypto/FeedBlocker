@@ -5,17 +5,13 @@ import android.content.Context
 import android.content.Intent
 
 /**
- * BroadcastReceiver — это "слушатель" системных или наших
- * собственных событий. Здесь он ловит нажатие кнопки "Пауза"
- * в уведомлении.
+ * Ловит нажатие кнопки «Пауза на 5 минут» в уведомлении.
+ * Логика единая с кнопкой на главном экране — PauseController.start:
+ * пауза на 5 минут + 5 минут в счётчик экранного времени одним действием.
  */
 class PauseNotificationReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
-        // Включаем паузу на 5 минут (5 * 60 * 1000 миллисекунд)
-        PrefsHelper.setPause(context, 5 * 60 * 1000L)
-
-        // Обновляем уведомление, чтобы показать, что пауза активна
-        NotificationHelper.showPausedNotification(context)
+        PauseController.start(context)
     }
 }

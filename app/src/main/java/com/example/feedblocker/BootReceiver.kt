@@ -30,9 +30,19 @@ class BootReceiver : BroadcastReceiver() {
         //
         // Единственное, что реально "не переживает" перезагрузку — это
         // постоянное уведомление о работе блокировки (оно обычное, а не
-        // от foreground-сервиса). Тихо восстанавливаем его здесь, если
-        // защита должна быть активна (сервис включён и нет паузы).
-        if (!PrefsHelper.isPaused(context) && AccessibilityStatus.isEnabled(context)) {
+        // от foreground-сервиса) и AlarmManager-будильники. Тихо
+        // восстанавливаем здесь нужное состояние:
+        //  - пауза активна  → уведомление «на паузе» + перепланируем
+        //    авто-возврат уведомления по окончании паузы;
+        //  - паузы нет      → обычное уведомление «FeedBlocker активен»,
+        //    если сервис доступности включён.
+        if (PrefsHelper.isPaused(context)) {
+            if (AccessibilityStatus.isEnabled(context)) {
+                NotificationHelper.createNotificationChannel(context)
+                NotificationHelper.showPausedNotification(context)
+            }
+            PauseController.reschedule(context)
+        } else if (AccessibilityStatus.isEnabled(context)) {
             NotificationHelper.createNotificationChannel(context)
             NotificationHelper.showActiveNotification(context)
         }

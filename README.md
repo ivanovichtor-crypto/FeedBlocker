@@ -16,7 +16,8 @@ The service is restricted (via `accessibility_service_config.xml`) to receive ev
 
 - **Main toggle** — turns the app's own "I want to be protected" state on or off. It does **not** jump you into system settings; it only remembers your choice locally.
 - **"i" button** — opens a short setup guide with two dedicated buttons: one opens system **Accessibility settings** (required once, Android won't let apps enable this permission programmatically), the other opens the app's own **Settings page** (for battery/autostart exceptions on MIUI, Huawei, Oppo, etc.).
-- **"Turn off blocking for 5 minutes"** — a quick pause, also available as an action on the persistent notification, for when you genuinely need to watch something in the feed.
+- **"Turn off blocking for 5 minutes"** — a quick pause, also available as an action on the persistent notification, for when you genuinely need to watch something in the feed. One action starts the pause **and** adds exactly 5 minutes to the screen-time counter. The pause always ends by itself — there is no "resume early" button, and the notification quietly flips back to "FeedBlocker active" when the 5 minutes are over (scheduled via `AlarmManager`).
+- **Screen-time counter** — a card in the middle of the home screen (Apple-style minimalism) showing the time spent in the feed, in hours and minutes, for **day / week / month / year**. Counters are stored locally (`SharedPreferences`) and reset strictly at local midnight for the day, at midnight of Sunday→Monday for the week, at midnight of the 1st for the month, and on January 1st for the year.
 
 If Accessibility isn't enabled yet, the home screen shows a short reminder pointing at the "i" button — the toggle itself won't silently fail without an explanation.
 
@@ -44,7 +45,8 @@ Android automatically re-binds an AccessibilityService that was already enabled 
 
 - Blocks the "For You" feed in TikTok
 - Blocks YouTube Shorts
-- 5-minute pause, from the app or from the notification
+- 5-minute pause, from the app or from the notification; it always ends by itself (no "resume" button)
+- Screen-time counter (day / week / month / year) — each 5-minute feed unlock adds exactly 5 minutes
 - Simple, minimal interface, light and dark theme
 - Zero network permissions, zero tracking
 
