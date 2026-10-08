@@ -40,6 +40,12 @@
             android:name=".PauseNotificationReceiver"
             android:exported="false" />
 
+        <!-- Автоматическое окончание паузы: возвращает уведомление в "FeedBlocker активен" -->
+        <receiver
+            android:name=".PauseEndReceiver"
+            android:exported="false" />
+
+
         <!-- BootReceiver: тихо восстанавливает уведомление о работе блокировки после перезагрузки -->
         <receiver
             android:name=".BootReceiver"
